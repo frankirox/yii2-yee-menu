@@ -1,36 +1,31 @@
 $(document).ready(function() {
 
-    $('.sortable').sortable({
-        connectWith: '.sortable',
+    $('.menu-box .menu-list').sortable({
+        connectWith: '.menu-list',
         tolerance: 'intersect',
         delay: 250,
         stop: function(event, ui) {
-            $('.menu-link-alert').hide().filter('.alert-primary').show();
-            menuLinkOrderItems = new Array();
+            var orders = [];
 
-            $(".menu-itemes .sortable-item-content").each(function(index, element) {
+            $(".menu-box .menu-link > div").each(function(index, element) {
                 $(element).find('.order').text(index);
-                var linkId = $(this).data('linkid');
-                var parentId = $(this).parent().parent().data('parentid');
-                
-                menuLinkOrderItems.push([linkId, index, parentId]);
+                var id = $(this).data('link-id');
+                var parent = $(this).closest('.menu-list').data('parent-id');
+                parent = (parent.length === 0) ? null : parent;
+                orders.push({id: id, order: index, parent: parent});
             });
 
+
+            console.log(orders);
             $.ajax({
                 type: "POST",
                 url: '/admin/menu/default/save-orders',
-                data: {settings: menuLinkOrderItems},
+                data: {orders: orders},
                 success: function(data){
-                    $('.menu-link-alert').hide().filter('.alert-info').show();
-                    setTimeout(function(){
-                        $('.menu-link-alert').hide();
-                    }, 1500);
+                    Notification.showSuccess('The changes have been saved.');
                 },
                 error: function(data){
-                    $('.menu-link-alert').hide().filter('.alert-danger').show();
-                    setTimeout(function(){
-                        $('.menu-link-alert').hide();
-                    }, 1500);
+                    Notification.showError('An error occurred during saving menu!');
                 },
             });
         },

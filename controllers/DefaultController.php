@@ -2,34 +2,31 @@
 
 namespace yeesoft\menu\controllers;
 
-use yeesoft\controllers\CrudController;
 use Yii;
-use yii\helpers\StringHelper;
-use yeesoft\helpers\YeeHelper;
-use yeesoft\models\User;
-use yii\helpers\ArrayHelper;
 use yii\filters\VerbFilter;
+use yii\helpers\ArrayHelper;
+use yeesoft\models\Menu;
 use yeesoft\models\MenuLink;
+use yeesoft\controllers\CrudController;
 
 /**
- * MenuController implements the CRUD actions for Post model.
+ * MenuController implements the CRUD actions for Menu model.
  */
 class DefaultController extends CrudController
 {
+
     public $modelClass = 'yeesoft\models\Menu';
-    public $modelSearchClass = 'yeesoft\menu\models\SearchMenu';
-    public $modelLinkSearchClass = 'yeesoft\menu\models\SearchMenuLink';
     public $disabledActions = ['view', 'bulk-activate', 'bulk-deactivate', 'toggle-attribute'];
 
     public function behaviors()
     {
         return ArrayHelper::merge(parent::behaviors(), [
-            'verbs' => [
-                'class' => VerbFilter::className(),
-                'actions' => [
-                    'save-orders' => ['post'],
-                ],
-            ],
+                    'verbs' => [
+                        'class' => VerbFilter::className(),
+                        'actions' => [
+                            'save-orders' => ['post'],
+                        ],
+                    ],
         ]);
     }
 
@@ -47,60 +44,49 @@ class DefaultController extends CrudController
         }
     }
 
-     /**
+    /**
      * Lists all models.
+     * 
      * @return mixed
      */
     public function actionIndex()
     {
-        $modelClass = $this->modelClass;
-        $searchModel = $this->modelSearchClass ? new $this->modelSearchClass : null;
-        $searchLinkModel = $this->modelLinkSearchClass ? new $this->modelLinkSearchClass : null;
+        $menus = Menu::find()->indexBy('id')->indexBy('id')->all();
+        $menuId = Yii::$app->request->get('menu_id', ArrayHelper::getValue(array_keys($menus), 0));
 
-//        $restrictAccess = (YeeHelper::isImplemented($modelClass, OwnerAccess::CLASSNAME)
-//            && !User::hasPermission($modelClass::getFullAccessPermission()));
+        $links = MenuLink::find()
+                ->joinWith('translations')
+                ->andWhere(['menu_id' => $menuId])
+                ->andWhere(['parent_id' => null])
+                ->orderBy('order')
+                ->all();
 
-        if ($searchModel) {
-            $searchName = StringHelper::basename($searchModel::className());
-            $params = Yii::$app->request->getQueryParams();
-
-//            if ($restrictAccess) {
-//                $params[$searchName][$modelClass::getOwnerField()] = Yii::$app->user->identity->id;
-//            }
-
-            $dataProvider = $searchModel->search($params);
-        } else {
-            $restrictParams = ($restrictAccess) ? [$modelClass::getOwnerField() => Yii::$app->user->identity->id] : [];
-            $dataProvider = new ActiveDataProvider(['query' => $modelClass::find()->where($restrictParams)]);
-        }
-
-        return $this->renderIsAjax('index', compact('dataProvider', 'searchModel', 'searchLinkModel'));
+        return $this->renderIsAjax('index', compact('menuId', 'menus', 'links'));
     }
 
     public function actionSaveOrders()
     {
-        if(Yii::$app->getRequest()->isAjax){
+        if (Yii::$app->getRequest()->isAjax) {
             $n = 1;
             $params = [];
             $select = [];
             $db = Yii::$app->db;
-            $settings = Yii::$app->getRequest()->post('settings');
-            
-            foreach ($settings as $setting) {
+            $orders = Yii::$app->getRequest()->post('orders');
+
+            foreach ($orders as $order) {
+                $order = (object) $order;
                 $select[] = "SELECT :id_{$n} as 'id', :order_{$n} as 'order', :parent_{$n} as 'parent_id'";
-                $params[":id_{$n}"] = $setting[0];
-                $params[":order_{$n}"] = (int) $setting[1];
-                $params[":parent_{$n}"] = (isset($setting[2])) ? $setting[2] : '';
+                $params[":id_{$n}"] = $order->id;
+                $params[":order_{$n}"] = (int) $order->order;
+                $params[":parent_{$n}"] = (!empty($order->parent)) ? $order->parent : null;
                 $n++;
             }
 
-            $select = implode(' UNION ', $select);
-            $menuLinkTable = MenuLink::tableName();
-            $db->createCommand("UPDATE $menuLinkTable m INNER JOIN ($select)t ON m.id=t.id "
-                . " SET m.order=t.order, m.parent_id=t.parent_id", $params)->execute();
-
+            $linkTable = MenuLink::tableName();
+            $db->createCommand("UPDATE {$linkTable} m INNER JOIN (" . implode(' UNION ', $select) . ") t ON m.id=t.id SET m.order=t.order, m.parent_id=t.parent_id", $params)->execute();
         }
 
         return false;
     }
+
 }
